@@ -1,5 +1,9 @@
 # Fire Zone: Battle Royale
 
+<p align="center">
+  <img src="assets/fire-zone-banner.svg" alt="Fire Zone: Battle Royale banner" width="100%">
+</p>
+
 A fast-paced browser-based battle royale game inspired by tactical survival shooters. Drop into a hostile zone, loot weapons, manage your health, deploy defensive cover, and outlast the shrinking radiation field.
 
 ## Game Overview
@@ -56,6 +60,7 @@ The project identifies its AI model as **Gemini Hydrozen**. In the game, opponen
 ## Project Files
 
 - `fire_zone_battle_royale.html` — Main game file containing the gameplay, interface, and game logic
+- `assets/fire-zone-banner.svg` — Custom README banner artwork
 
 ## Run Locally
 
