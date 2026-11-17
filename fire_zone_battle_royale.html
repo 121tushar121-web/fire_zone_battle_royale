@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fire Zone: Battle Royale</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0f17;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        .font-tactical {
+            font-family: 'Rajdhani', sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Free Fire inspired angular button & HUD styling */
+        .ff-skew {
+            transform: skewX(-10deg);
+        }
+        .ff-unskew {
+            transform: skewX(10deg);
+        }
+        .ff-btn-gold {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+            transition: all 0.15s ease;
+        }
+        .ff-btn-gold:hover {
+            filter: brightness(1.1);
+            transform: skewX(-10deg) translateY(-1px);
+        }
+        .ff-btn-gold:active {
+            transform: skewX(-10deg) translateY(1px);
+        }
+        .glass-hud {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .slot-active {
+            border-color: #f59e0b !important;
+            background: rgba(245, 158, 11, 0.22) !important;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+        }
+        @keyframes pulseDanger {
+            0%, 100% { opacity: 0.85; }
+            50% { opacity: 0.35; }
+        }
+        .zone-warning-pulse {
+            animation: pulseDanger 1.2s infinite;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <!-- Main Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top-Left: Minimap & Zone Timer -->
+    <div id="hudTopLeft" class="hidden fixed top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
+        <div class="relative w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden border-2 border-slate-600/80 shadow-xl bg-slate-900/90">
+            <canvas id="minimapCanvas" width="160" height="160" class="w-full h-full"></canvas>
+            <div class="absolute bottom-1 left-1.5 text-[10px] font-tactical font-bold tracking-wider text-slate-300 bg-black/60 px-1.5 rounded">
+                BERMUDA SECTOR
+            </div>
+        </div>
+        <!-- Safe Zone Timer Bar -->
+        <div class="glass-hud rounded px-2.5 py-1 flex items-center justify-between text-xs font-tactical font-bold tracking-wide">
+            <span id="zoneStatusLabel" class="text-cyan-400">SAFE ZONE</span>
+            <span id="zoneTimerText" class="text-white">00:25</span>
+        </div>
+        <!-- Sound Toggle -->
+        <button id="muteBtn" class="pointer-events-auto self-start glass-hud hover:bg-slate-800 text-xs px-2.5 py-1 rounded flex items-center gap-1.5 text-slate-200 transition">
+            <span id="muteIcon">🔊</span>
+            <span id="muteLabel" class="font-tactical font-semibold">SFX ON</span>
+        </button>
+    </div>
+
+    <!-- Top-Right: Alive & Kills Counter + Kill Feed -->
+    <div id="hudTopRight" class="hidden fixed top-3 right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
+        <div class="flex items-center gap-1.5">
+            <!-- Alive Box -->
+            <div class="glass-hud ff-skew px-3.5 py-1.5 rounded-sm flex items-center gap-2 border-l-4 border-amber-500">
+                <div class="ff-unskew flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="aliveCount" class="font-tactical font-extrabold text-xl leading-none text-white">18</span>
+                    <span class="font-tactical text-xs font-bold text-slate-400 uppercase tracking-wider">Alive</span>
+                </div>
+            </div>
+            <!-- Kills Box -->
+            <div class="glass-hud ff-skew px-3.5 py-1.5 rounded-sm flex items-center gap-2 border-l-4 border-rose-500">
+                <div class="ff-unskew flex items-center gap-2">
+                    <span class="text-rose-400 text-sm">☠</span>
+                    <span id="killCount" class="font-tactical font-extrabold text-xl leading-none text-white">0</span>
+                    <span class="font-tactical text-xs font-bold text-slate-400 uppercase tracking-wider">Kills</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kill Feed -->
+        <div id="killFeed" class="flex flex-col items-end gap-1 max-w-[260px]"></div>
+    </div>
+
+    <!-- Zone Damage Warning Banner -->
+    <div id="zoneWarningBanner" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+        <div class="bg-blue-600/90 border border-cyan-300 px-4 py-1 rounded-full text-xs sm:text-sm font-tactical font-bold tracking-wider uppercase shadow-lg zone-warning-pulse">
+            ⚠ Outside Safe Zone! Taking Radiation Damage
+        </div>
+    </div>
+
+    <!-- Bottom HUD: Consumables, Health/Armor Bars, Weapons -->
+    <div id="hudBottom" class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-20 w-[96%] max-w-2xl flex flex-col gap-2 pointer-events-none">
+        
+        <!-- Quick Action & Pickup Prompt -->
+        <div class="flex justify-between items-end px-1">
+            <!-- Left Consumables: Medkit & Gloo Wall -->
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <!-- Medkit Button -->
+                <button id="btnMedkit" class="glass-hud hover:bg-slate-800/90 active:scale-95 transition rounded-lg p-2 flex items-center gap-2 border border-emerald-500/40 relative">
+                    <div class="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                        +
+                    </div>
+                    <div class="text-left pr-1">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">Medkit [H]</div>
+                        <div id="medkitCount" class="font-tactical font-bold text-base leading-tight text-emerald-300">x2</div>
+                    </div>
+                    <!-- Healing Progress Overlay -->
+                    <div id="healProgressOverlay" class="hidden absolute inset-0 bg-emerald-500/30 rounded-lg flex items-center justify-center font-tactical font-bold text-xs text-white">
+                        HEALING...
+                    </div>
+                </button>
+
+                <!-- Gloo Wall Button -->
+                <button id="btnGloo" class="glass-hud hover:bg-slate-800/90 active:scale-95 transition rounded-lg p-2 flex items-center gap-2 border border-cyan-400/50">
+                    <div class="w-8 h-8 rounded bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3L4 7v6c0 5.5 3.4 8.7 8 10 4.6-1.3 8-4.5 8-10V7l-8-4z"/>
+                        </svg>
+                    </div>
+                    <div class="text-left pr-1">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">Gloo [G / RMB]</div>
+                        <div id="glooCount" class="font-tactical font-bold text-base leading-tight text-cyan-300">x2</div>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Reload Button (Helpful for touch & visual indicator) -->
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <button id="btnReload" class="glass-hud hover:bg-slate-800 active:scale-95 transition rounded-lg px-3 py-2 text-xs font-tactical font-bold tracking-wider text-amber-400 border border-amber-500/30">
+                    RELOAD [R]
+                </button>
+            </div>
+        </div>
+
+        <!-- Armor & HP Bars -->
+        <div class="glass-hud rounded-lg p-2 flex flex-col gap-1.5">
+            <!-- Armor Bar -->
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] font-tactical font-bold text-sky-400 w-10">VEST</span>
+                <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="armorBar" class="h-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-150" style="width: 0%;"></div>
+                </div>
+                <span id="armorText" class="text-[11px] font-tactical font-bold text-sky-300 w-12 text-right">0/100</span>
+            </div>
+            <!-- HP Bar -->
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] font-tactical font-bold text-emerald-400 w-10">HP</span>
+                <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden p-0.5">
+                    <div id="hpBar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-lime-400 transition-all duration-150" style="width: 100%;"></div>
+                </div>
+                <span id="hpText" class="text-xs font-tactical font-bold text-white w-12 text-right">200/200</span>
+            </div>
+        </div>
+
+        <!-- Weapon Hotbar (3 Slots) -->
+        <div class="grid grid-cols-3 gap-2 pointer-events-auto">
+            <button id="slot0" onclick="selectWeaponSlot(0)" class="glass-hud rounded-lg p-2 flex items-center justify-between border border-slate-700 transition text-left">
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold">[1] PRIMARY</div>
+                    <div id="slot0Name" class="font-tactical font-bold text-sm sm:text-base text-white truncate">EMPTY</div>
+                </div>
+                <div id="slot0Ammo" class="font-tactical font-bold text-xs sm:text-sm text-amber-400">--/--</div>
+            </button>
+
+            <button id="slot1" onclick="selectWeaponSlot(1)" class="glass-hud rounded-lg p-2 flex items-center justify-between border border-slate-700 transition text-left">
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold">[2] SECONDARY</div>
+                    <div id="slot1Name" class="font-tactical font-bold text-sm sm:text-base text-white truncate">EMPTY</div>
+                </div>
+                <div id="slot1Ammo" class="font-tactical font-bold text-xs sm:text-sm text-amber-400">--/--</div>
+            </button>
+
+            <button id="slot2" onclick="selectWeaponSlot(2)" class="glass-hud rounded-lg p-2 flex items-center justify-between border border-slate-700 transition text-left slot-active">
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold">[3] SIDEARM</div>
+                    <div id="slot2Name" class="font-tactical font-bold text-sm sm:text-base text-white truncate">G18 PISTOL</div>
+                </div>
+                <div id="slot2Ammo" class="font-tactical font-bold text-xs sm:text-sm text-amber-400">15/∞</div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobile Dual Joysticks Overlay (Shown on touch devices) -->
+    <div id="touchControls" class="hidden fixed inset-0 z-10 pointer-events-none">
+        <!-- Left Move Stick Zone -->
+        <div id="leftStickZone" class="pointer-events-auto fixed bottom-36 left-4 w-32 h-32 rounded-full bg-white/5 border border-white/15 flex items-center justify-center">
+            <div id="leftStickKnob" class="w-12 h-12 rounded-full bg-amber-400/50 border border-amber-300 shadow-lg"></div>
+        </div>
+        <!-- Right Aim/Fire Stick Zone -->
+        <div id="rightStickZone" class="pointer-events-auto fixed bottom-36 right-4 w-32 h-32 rounded-full bg-rose-500/10 border border-rose-400/25 flex items-center justify-center">
+            <div id="rightStickKnob" class="w-12 h-12 rounded-full bg-rose-500/60 border border-rose-300 shadow-lg flex items-center justify-center text-xs font-bold">FIRE</div>
+        </div>
+    </div>
+
+    <!-- START / LOBBY SCREEN -->
+    <div id="startScreen" class="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="max-w-lg w-full bg-slate-900/95 border border-slate-700/80 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+            <!-- Accent Top Bar -->
+            <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500"></div>
+
+            <div class="flex items-center justify-between mb-2">
+                <span class="px-2.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 font-tactical font-bold text-xs tracking-widest uppercase">
+                    Battle Royale Mode • Solo
+                </span>
+                <span class="text-xs text-slate-400 font-tactical font-semibold">18 SURVIVORS</span>
+            </div>
+
+            <h1 class="font-tactical font-extrabold text-4xl sm:text-5xl tracking-tight text-white uppercase italic">
+                FIRE <span class="text-amber-500">ZONE</span>
+            </h1>
+            <p class="text-slate-300 text-sm mt-1 mb-5">
+                Loot high-tier weapons, deploy <span class="text-cyan-400 font-semibold">Gloo Walls</span> for instant cover, outrun the shrinking radiation zone, and claim the <span class="text-amber-400 font-semibold">BOOYAH!</span>
+            </p>
+
+            <!-- Survivor Loadout & Controls Card -->
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 mb-6 space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center font-tactical font-extrabold text-amber-400 text-lg">
+                            K
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase font-bold">Survivor</div>
+                            <div class="font-tactical font-bold text-base text-white">STRIKER-01 (200 HP)</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-slate-400 uppercase font-bold">Starter Kit</div>
+                        <div class="text-xs font-semibold text-cyan-300">G18 • 2x Medkit • 2x Gloo</div>
+                    </div>
+                </div>
+
+                <!-- Controls Grid -->
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 pt-1">
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-amber-400">WASD</kbd>
+                        <span>Move Survivor</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-amber-400">LMB</kbd>
+                        <span>Aim & Shoot</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-cyan-400">G / RMB</kbd>
+                        <span>Deploy Gloo Wall</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-emerald-400">H</kbd>
+                        <span>Use Medkit</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-amber-400">1 2 3 / R</kbd>
+                        <span>Switch / Reload</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] font-mono text-slate-300">AUTO</kbd>
+                        <span>Walk over Loot</span>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btnStartGame" class="w-full py-3.5 rounded-lg ff-btn-gold ff-skew text-slate-950 font-tactical font-extrabold text-2xl tracking-wider uppercase cursor-pointer">
+                <span class="block ff-unskew">DROP IN</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- END SCREEN (BOOYAH / ELIMINATED) -->
+    <div id="endScreen" class="hidden fixed inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="max-w-md w-full bg-slate-900/95 border border-slate-700 rounded-2xl p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden">
+            <div id="endTopAccent" class="absolute top-0 left-0 right-0 h-2 bg-amber-500"></div>
+
+            <div id="endBadge" class="inline-block px-3 py-1 rounded-full text-xs font-tactical font-bold uppercase tracking-widest mb-2 bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                MATCH SUMMARY
+            </div>
+
+            <h2 id="endTitle" class="font-tactical font-extrabold text-5xl sm:text-6xl italic uppercase tracking-tight text-amber-400 drop-shadow">
+                BOOYAH!
+            </h2>
+            <p id="endSubtitle" class="text-slate-300 text-sm mt-1 mb-6">
+                You are the last survivor standing!
+            </p>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-slate-400 font-bold uppercase">Rank</div>
+                    <div id="statRank" class="font-tactical font-extrabold text-2xl text-amber-400">#1</div>
+                </div>
+                <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-slate-400 font-bold uppercase">Eliminations</div>
+                    <div id="statKills" class="font-tactical font-extrabold text-2xl text-rose-400">0</div>
+                </div>
+                <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-slate-400 font-bold uppercase">Damage</div>
+                    <div id="statDamage" class="font-tactical font-extrabold text-2xl text-cyan-400">0</div>
+                </div>
+            </div>
+
+            <button id="btnPlayAgain" class="w-full py-3.5 rounded-lg ff-btn-gold ff-skew text-slate-950 font-tactical font-extrabold text-xl tracking-wider uppercase cursor-pointer">
+                <span class="block ff-unskew">PLAY AGAIN</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * FIRE ZONE: BATTLE ROYALE
+         * Complete 2D Top-Down Free Fire-inspired Battle Royale Engine
+         */
+
+        // ==========================================
+        // 1. PROCEDURAL WEB AUDIO ENGINE
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playGunshot(weaponId, distanceRatio = 1) {
+                if (this.muted || !this.ctx || distanceRatio <= 0.05) return;
+                const now = this.ctx.currentTime;
+                const vol = Math.min(0.35, 0.35 * distanceRatio);
+
+                // Noise burst for gunshot punch
+                const bufferSize = this.ctx.sampleRate * (weaponId === 'sniper' ? 0.25 : 0.12);
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.28));
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                if (weaponId === 'shotgun') filter.frequency.setValueAtTime(900, now);
+                else if (weaponId === 'sniper') filter.frequency.setValueAtTime(1600, now);
+                else if (weaponId === 'ar') filter.frequency.setValueAtTime(1300, now);
+                else filter.frequency.setValueAtTime(1800, now);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(vol * (weaponId === 'sniper' ? 1.4 : 1.0), now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + (weaponId === 'sniper' ? 0.24 : 0.11));
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+
+            playHitMarker(isCrit = false) {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = isCrit ? 'triangle' : 'sine';
+                osc.frequency.setValueAtTime(isCrit ? 1400 : 900, now);
+                osc.frequency.exponentialRampToValueAtTime(isCrit ? 2200 : 400, now + 0.06);
+
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.065);
+            }
+
+            playGlooDeploy() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(520, now + 0.18);
+
+                gain.gain.setValueAtTime(0.28, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.23);
+            }
+
+            playPickup() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(520, now);
+                osc.frequency.setValueAtTime(780, now + 0.05);
+
+                gain.gain.setValueAtTime(0.14, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.13);
+            }
+
+            playHeal() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.linearRampToValueAtTime(880, now + 0.25);
+
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+
+            playReload() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.setValueAtTime(480, now + 0.08);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+        }
+
+        const sfx = new SoundEngine();
+
+        // ==========================================
+        // 2. WEAPON & GAME CONSTANTS
+        // ==========================================
+        const MAP_SIZE = 2400;
+        const TOTAL_SURVIVORS = 18; // 1 Player + 17 AI Bots
+
+        const WEAPONS = {
+            pistol: {
+                id: 'pistol',
+                name: 'G18 PISTOL',
+                shortName: 'G18',
+                slotType: 'sidearm',
+                damage: 24,
+                fireRate: 0.24, // seconds between shots
+                magSize: 15,
+                reloadTime: 1.1,
+                bulletSpeed: 980,
+                range: 560,
+                spread: 0.05,
+                pellets: 1,
+                color: '#cbd5e1',
+                infiniteAmmo: true
+            },
+            ar: {
+                id: 'ar',
+                name: 'AK47 / M4A1',
+                shortName: 'AK47',
+                slotType: 'primary',
+                damage: 31,
+                fireRate: 0.125,
+                magSize: 30,
+                reloadTime: 1.5,
+                bulletSpeed: 1180,
+                range: 760,
+                spread: 0.065,
+                pellets: 1,
+                color: '#f59e0b',
+                infiniteAmmo: false
+            },
+            shotgun: {
+                id: 'shotgun',
+                name: 'M1887 SHOTGUN',
+                shortName: 'M1887',
+                slotType: 'primary',
+                damage: 22, // x6 pellets = 132 max burst
+                fireRate: 0.65,
+                magSize: 6,
+                reloadTime: 1.6,
+                bulletSpeed: 920,
+                range: 370,
+                spread: 0.24,
+                pellets: 6,
+                color: '#f43f5e',
+                infiniteAmmo: false
+            },
+            sniper: {
+                id: 'sniper',
+                name: 'AWM SNIPER',
+                shortName: 'AWM',
+                slotType: 'primary',
+                damage: 115,
+                fireRate: 1.05,
+                magSize: 5,
+                reloadTime: 1.8,
+                bulletSpeed: 1650,
+                range: 1150,
+                spread: 0.008,
+                pellets: 1,
+                color: '#38bdf8',
+                infiniteAmmo: false
+            }
+        };
+
+        const BOT_NAMES = [
+            "PRO_GAMER", "VIPER_FF", "SHADOW_X", "COBRA_99", "BLAZE_KING",
+            "GHOST_RIDER", "APEX_WOLF", "TITAN_SLAYER", "NOVA_STRIKE", "REAPER_BD",
+            "KIRA_FF", "ALOK_MAIN", "CHRONO_X", "KELLY_RUN", "HAYATO_BLADE",
+            "DRAGON_FIRE", "SNIPER_GOD", "PHANTOM_07", "STORM_Z", "VENOM_X"
+        ];
+
+        // ==========================================
+        // 3. GAME STATE & ENTITIES
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const miniCanvas = document.getElementById('minimapCanvas');
+        const miniCtx = miniCanvas.getContext('2d');
+
+        let gameState = 'START'; // START, PLAYING, GAMEOVER, VICTORY
+        let lastTime = 0;
+
+        // World objects
+        let buildings = [];
+        let trees = [];
+        let rocks = [];
+        let lootItems = [];
+        let bullets = [];
+        let glooWalls = [];
+        let particles = [];
+        let floatingTexts = [];
+        let survivors = [];
+        let player = null;
+
+        // Safe Zone state
+        let safeZone = {
+            x: MAP_SIZE / 2,
+            y: MAP_SIZE / 2,
+            currentRadius: 1550,
+            targetRadius: 1150,
+            nextX: MAP_SIZE / 2,
+            nextY: MAP_SIZE / 2,
+            stage: 1,
+            timer: 22,
+            shrinking: false,
+            damagePerSec: 6
+        };
+
+        // Camera
+        const camera = { x: 0, y: 0, shake: 0 };
+
+        // Input state
+        const keys = {};
+        const mouse = { x: 0, y: 0, worldX: 0, worldY: 0, down: false };
+        const touchInput = { active: false, moveX: 0, moveY: 0, aimX: 0, aimY: 0, firing: false };
+
+        // ==========================================
+        // 4. MAP GENERATION (BERMUDA-STYLE COMPOUNDS)
+        // ==========================================
+        function generateMap() {
+            buildings = [];
+            trees = [];
+            rocks = [];
+            lootItems = [];
+            bullets = [];
+            glooWalls = [];
+            particles = [];
+            floatingTexts = [];
+
+            // Named Compounds (Rectangles with doorway gaps)
+            const compounds = [
+                { cx: 600, cy: 600, name: "CLOCK TOWER" },
+                { cx: 1800, cy: 620, name: "MILL" },
+                { cx: 1200, cy: 1200, name: "PEAK" },
+                { cx: 620, cy: 1800, name: "POCHINOK" },
+                { cx: 1820, cy: 1780, name: "FACTORY" },
+                { cx: 1200, cy: 480, name: "BIMA SAKTI" },
+                { cx: 1200, cy: 1920, name: "MARS ELECTRIC" }
+            ];
+
+            compounds.forEach(comp => {
+                // Create 2 to 3 open-door buildings per compound
+                createBuilding(comp.cx - 140, comp.cy - 110, 130, 100, 'bottom');
+                createBuilding(comp.cx + 30, comp.cy - 90, 120, 130, 'left');
+                if (Math.random() > 0.3) {
+                    createBuilding(comp.cx - 70, comp.cy + 50, 150, 95, 'top');
+                }
+
+                // High-tier loot inside compound
+                for (let i = 0; i < 4; i++) {
+                    spawnRandomLoot(
+                        comp.cx + (Math.random() - 0.5) * 220,
+                        comp.cy + (Math.random() - 0.5) * 220
+                    );
+                }
+            });
+
+            // Scatter additional loot crates across the map
+            for (let i = 0; i < 65; i++) {
+                const lx = 140 + Math.random() * (MAP_SIZE - 280);
+                const ly = 140 + Math.random() * (MAP_SIZE - 280);
+                if (!pointInWall(lx, ly, 20)) {
+                    spawnRandomLoot(lx, ly);
+                }
+            }
+
+            // Scatter Trees (Visual foliage + trunk collision)
+            for (let i = 0; i < 95; i++) {
+                const tx = 100 + Math.random() * (MAP_SIZE - 200);
+                const ty = 100 + Math.random() * (MAP_SIZE - 200);
+                if (!pointInWall(tx, ty, 35)) {
+                    trees.push({
+                        x: tx,
+                        y: ty,
+                        trunkRadius: 14,
+                        canopyRadius: 34 + Math.random() * 14,
+                        shade: Math.random() > 0.5 ? '#15803d' : '#166534'
+                    });
+                }
+            }
+
+            // Scatter Rocks (Hard cover)
+            for (let i = 0; i < 55; i++) {
+                const rx = 120 + Math.random() * (MAP_SIZE - 240);
+                const ry = 120 + Math.random() * (MAP_SIZE - 240);
+                if (!pointInWall(rx, ry, 30)) {
+                    rocks.push({
+                        x: rx,
+                        y: ry,
+                        radius: 22 + Math.random() * 14
+                    });
+                }
+            }
+        }
+
+        function createBuilding(x, y, w, h, doorSide) {
+            const wallThick = 14;
+            const doorGap = 44;
+
+            // Floor record for visual rendering
+            const floor = { x, y, w, h, walls: [] };
+
+            // Top wall
+            if (doorSide === 'top') {
+                const seg = (w - doorGap) / 2;
+                floor.walls.push({ x, y, w: seg, h: wallThick });
+                floor.walls.push({ x: x + seg + doorGap, y, w: seg, h: wallThick });
+            } else {
+                floor.walls.push({ x, y, w, h: wallThick });
+            }
+
+            // Bottom wall
+            if (doorSide === 'bottom') {
+                const seg = (w - doorGap) / 2;
+                floor.walls.push({ x, y: y + h - wallThick, w: seg, h: wallThick });
+                floor.walls.push({ x: x + seg + doorGap, y: y + h - wallThick, w: seg, h: wallThick });
+            } else {
+                floor.walls.push({ x, y: y + h - wallThick, w, h: wallThick });
+            }
+
+            // Left wall
+            if (doorSide === 'left') {
+                const seg = (h - doorGap) / 2;
+                floor.walls.push({ x, y, w: wallThick, h: seg });
+                floor.walls.push({ x, y: y + seg + doorGap, w: wallThick, h: seg });
+            } else {
+                floor.walls.push({ x, y, w: wallThick, h });
+            }
+
+            // Right wall
+            if (doorSide === 'right') {
+                const seg = (h - doorGap) / 2;
+                floor.walls.push({ x: x + w - wallThick, y, w: wallThick, h: seg });
+                floor.walls.push({ x: x + w - wallThick, y: y + seg + doorGap, w: wallThick, h: seg });
+            } else {
+                floor.walls.push({ x: x + w - wallThick, y, w: wallThick, h });
+            }
+
+            buildings.push(floor);
+        }
+
+        function spawnRandomLoot(x, y) {
+            const roll = Math.random();
+            let item = { x, y, radius: 14, bobOffset: Math.random() * Math.PI * 2 };
+
+            if (roll < 0.24) {
+                item.type = 'weapon';
+                item.weaponId = 'ar';
+                item.label = 'AK47';
+                item.color = '#f59e0b';
+            } else if (roll < 0.40) {
+                item.type = 'weapon';
+                item.weaponId = 'shotgun';
+                item.label = 'M1887';
+                item.color = '#f43f5e';
+            } else if (roll < 0.50) {
+                item.type = 'weapon';
+                item.weaponId = 'sniper';
+                item.label = 'AWM';
+                item.color = '#38bdf8';
+            } else if (roll < 0.68) {
+                item.type = 'medkit';
+                item.label = 'MEDKIT';
+                item.color = '#10b981';
+            } else if (roll < 0.84) {
+                item.type = 'gloo';
+                item.label = 'GLOO WALL';
+                item.color = '#22d3ee';
+            } else if (roll < 0.94) {
+                item.type = 'vest';
+                item.label = 'LV.2 VEST';
+                item.color = '#60a5fa';
+            } else {
+                item.type = 'ammo';
+                item.label = 'AMMO BOX';
+                item.color = '#fde047';
+            }
+
+            lootItems.push(item);
+        }
+
+        // ==========================================
+        // 5. SURVIVOR ENTITY (PLAYER & AI BOTS)
+        // ==========================================
+        function createSurvivor(id, name, isPlayer, x, y) {
+            const pistolClone = {
+                ...WEAPONS.pistol,
+                ammo: WEAPONS.pistol.magSize,
+                reserve: 999
+            };
+
+            return {
+                id,
+                name,
+                isPlayer,
+                x,
+                y,
+                radius: 17,
+                angle: Math.random() * Math.PI * 2,
+                speed: isPlayer ? 235 : 205,
+                hp: 200,
+                maxHp: 200,
+                armor: isPlayer ? 25 : 0,
+                maxArmor: 100,
+                alive: true,
+                kills: 0,
+                damageDealt: 0,
+
+                // Inventory: [Slot 0 Primary, Slot 1 Secondary, Slot 2 Sidearm]
+                weapons: [null, null, pistolClone],
+                activeSlot: 2,
+                medkits: isPlayer ? 2 : 1,
+                glooWalls: isPlayer ? 2 : 1,
+
+                // Combat & Action timers
+                fireCooldown: 0,
+                reloading: false,
+                reloadTimer: 0,
+                healing: false,
+                healTimer: 0,
+                hitFlash: 0,
+                muzzleFlash: 0,
+
+                // Visual color
+                shirtColor: isPlayer ? '#f59e0b' : `hsl(${Math.floor(Math.random() * 360)}, 68%, 48%)`,
+
+                // AI Specific brain
+                aiState: 'ROAM',
+                aiTarget: null,
+                aiMoveAngle: Math.random() * Math.PI * 2,
+                aiDecisionTimer: Math.random() * 1.5,
+                aiStrafeDir: Math.random() > 0.5 ? 1 : -1
+            };
+        }
+
+        function spawnSurvivors() {
+            survivors = [];
+
+            // Spawn Player safely
+            let px = MAP_SIZE / 2 + (Math.random() - 0.5) * 700;
+            let py = MAP_SIZE / 2 + (Math.random() - 0.5) * 700;
+            while (pointInWall(px, py, 25)) {
+                px = 300 + Math.random() * (MAP_SIZE - 600);
+                py = 300 + Math.random() * (MAP_SIZE - 600);
+            }
+            player = createSurvivor('player', 'YOU (STRIKER)', true, px, py);
+            survivors.push(player);
+
+            // Shuffle bot names
+            const shuffledNames = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+
+            // Spawn AI Bots around map
+            for (let i = 0; i < TOTAL_SURVIVORS - 1; i++) {
+                let bx = 180 + Math.random() * (MAP_SIZE - 360);
+                let by = 180 + Math.random() * (MAP_SIZE - 360);
+                while (pointInWall(bx, by, 25) || Math.hypot(bx - px, by - py) < 350) {
+                    bx = 180 + Math.random() * (MAP_SIZE - 360);
+                    by = 180 + Math.random() * (MAP_SIZE - 360);
+                }
+                const bot = createSurvivor(`bot_${i}`, shuffledNames[i % shuffledNames.length], false, bx, by);
+                // Give some bots a starter rifle or shotgun for variety
+                if (Math.random() < 0.45) {
+                    const wKey = Math.random() < 0.7 ? 'ar' : 'shotgun';
+                    bot.weapons[0] = { ...WEAPONS[wKey], ammo: WEAPONS[wKey].magSize, reserve: 90 };
+                    bot.activeSlot = 0;
+                }
+                survivors.push(bot);
+            }
+        }
+
+        // ==========================================
+        // 6. COLLISION HELPERS
+        // ==========================================
+        function circleRectIntersect(cx, cy, cr, rx, ry, rw, rh) {
+            const closestX = Math.max(rx, Math.min(cx, rx + rw));
+            const closestY = Math.max(ry, Math.min(cy, ry + rh));
+            const dx = cx - closestX;
+            const dy = cy - closestY;
+            return (dx * dx + dy * dy) < (cr * cr);
+        }
+
+        function pointInWall(x, y, radius = 0) {
+            if (x - radius < 20 || x + radius > MAP_SIZE - 20 || y - radius < 20 || y + radius > MAP_SIZE - 20) {
+                return true;
+            }
+            for (const b of buildings) {
+                for (const w of b.walls) {
+                    if (circleRectIntersect(x, y, radius, w.x, w.y, w.w, w.h)) return true;
+                }
+            }
+            for (const r of rocks) {
+                if (Math.hypot(x - r.x, y - r.y) < radius + r.radius) return true;
+            }
+            for (const t of trees) {
+                if (Math.hypot(x - t.x, y - t.y) < radius + t.trunkRadius) return true;
+            }
+            for (const gw of glooWalls) {
+                if (pointNearGlooWall(x, y, radius, gw)) return true;
+            }
+            return false;
+        }
+
+        function pointNearGlooWall(px, py, radius, gw) {
+            // Transform point into Gloo Wall local oriented box
+            const dx = px - gw.x;
+            const dy = py - gw.y;
+            const cos = Math.cos(-gw.angle);
+            const sin = Math.sin(-gw.angle);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+
+            const halfThick = gw.thickness / 2 + radius;
+            const halfWidth = gw.width / 2 + radius;
+            return Math.abs(localX) <= halfThick && Math.abs(localY) <= halfWidth;
+        }
+
+        function moveEntityWithCollision(entity, dx, dy) {
+            // Move X
+            const nextX = entity.x + dx;
+            if (!pointInWall(nextX, entity.y, entity.radius)) {
+                entity.x = nextX;
+            }
+            // Move Y
+            const nextY = entity.y + dy;
+            if (!pointInWall(entity.x, nextY, entity.radius)) {
+                entity.y = nextY;
+            }
+        }
+
+        // ==========================================
+        // 7. COMBAT, WEAPONS & GLOO WALL ACTIONS
+        // ==========================================
+        function getActiveWeapon(survivor) {
+            return survivor.weapons[survivor.activeSlot] || survivor.weapons[2];
+        }
+
+        function selectWeaponSlot(slotIndex) {
+            if (!player || !player.alive) return;
+            if (player.weapons[slotIndex]) {
+                player.activeSlot = slotIndex;
+                player.reloading = false;
+                player.healing = false;
+                updateHUD();
+            }
+        }
+
+        function startReload(survivor) {
+            const w = getActiveWeapon(survivor);
+            if (!w || survivor.reloading) return;
+            if (w.ammo >= w.magSize) return;
+            if (!w.infiniteAmmo && w.reserve <= 0) return;
+
+            survivor.reloading = true;
+            survivor.healing = false;
+            survivor.reloadTimer = w.reloadTime;
+            if (survivor.isPlayer) sfx.playReload();
+        }
+
+        function useMedkit(survivor) {
+            if (!survivor.alive || survivor.medkits <= 0 || survivor.hp >= survivor.maxHp || survivor.healing) return;
+            survivor.healing = true;
+            survivor.reloading = false;
+            survivor.healTimer = 1.6; // 1.6s quick Free Fire medkit channel
+            if (survivor.isPlayer) {
+                document.getElementById('healProgressOverlay').classList.remove('hidden');
+            }
+        }
+
+        function deployGlooWall(survivor) {
+            if (!survivor.alive || survivor.glooWalls <= 0) return;
+
+            const dist = 48;
+            const gx = survivor.x + Math.cos(survivor.angle) * dist;
+            const gy = survivor.y + Math.sin(survivor.angle) * dist;
+
+            survivor.glooWalls--;
+            glooWalls.push({
+                x: gx,
+                y: gy,
+                angle: survivor.angle,
+                width: 78,
+                thickness: 16,
+                hp: 260,
+                maxHp: 260,
+                life: 24, // Despawns after 24s
+                ownerId: survivor.id
+            });
+
+            // Spawn ice/crystal particles
+            for (let i = 0; i < 12; i++) {
+                particles.push({
+                    x: gx + (Math.random() - 0.5) * 40,
+                    y: gy + (Math.random() - 0.5) * 40,
+                    vx: (Math.random() - 0.5) * 140,
+                    vy: (Math.random() - 0.5) * 140,
+                    life: 0.45,
+                    maxLife: 0.45,
+                    color: '#22d3ee',
+                    size: 4
+                });
+            }
+
+            if (survivor.isPlayer) {
+                sfx.playGlooDeploy();
+                updateHUD();
+            }
+        }
+
+        function fireWeapon(survivor) {
+            const w = getActiveWeapon(survivor);
+            if (!w || survivor.fireCooldown > 0 || survivor.reloading) return;
+
+            if (w.ammo <= 0) {
+                startReload(survivor);
+                return;
+            }
+
+            // Cancel healing if shooting
+            if (survivor.healing) {
+                survivor.healing = false;
+                if (survivor.isPlayer) document.getElementById('healProgressOverlay').classList.add('hidden');
+            }
+
+            w.ammo--;
+            survivor.fireCooldown = w.fireRate;
+            survivor.muzzleFlash = 0.06;
+
+            // Sound distance attenuation
+            const distToPlayer = player ? Math.hypot(survivor.x - player.x, survivor.y - player.y) : 9999;
+            const audibility = Math.max(0, 1 - distToPlayer / 950);
+            sfx.playGunshot(w.id, survivor.isPlayer ? 1 : audibility);
+
+            if (survivor.isPlayer) {
+                camera.shake = w.id === 'sniper' ? 7 : (w.id === 'shotgun' ? 6 : 2.5);
+            }
+
+            const barrelDist = survivor.radius + 12;
+            const startX = survivor.x + Math.cos(survivor.angle) * barrelDist;
+            const startY = survivor.y + Math.sin(survivor.angle) * barrelDist;
+
+            for (let p = 0; p < w.pellets; p++) {
+                const spreadAngle = survivor.angle + (Math.random() - 0.5) * w.spread;
+                // 18% chance of critical headshot!
+                const isCrit = Math.random() < 0.18;
+                bullets.push({
+                    x: startX,
+                    y: startY,
+                    prevX: startX,
+                    prevY: startY,
+                    vx: Math.cos(spreadAngle) * w.bulletSpeed,
+                    vy: Math.sin(spreadAngle) * w.bulletSpeed,
+                    damage: isCrit ? Math.round(w.damage * 1.65) : w.damage,
+                    isCrit,
+                    rangeLeft: w.range,
+                    ownerId: survivor.id,
+                    color: w.color
+                });
+            }
+
+            if (w.ammo === 0) {
+                startReload(survivor);
+            }
+        }
+
+        function applyDamage(target, amount, attacker, isCrit = false) {
+            if (!target.alive) return;
+
+            // Vest reduces incoming damage by up to 40%
+            let finalDamage = amount;
+            if (target.armor > 0) {
+                const absorbed = Math.min(target.armor, amount * 0.45);
+                target.armor = Math.max(0, target.armor - absorbed);
+                finalDamage = Math.round(amount - absorbed * 0.85);
+            }
+
+            target.hp -= finalDamage;
+            target.hitFlash = 0.1;
+
+            if (attacker) {
+                attacker.damageDealt += finalDamage;
+                if (attacker.isPlayer) {
+                    sfx.playHitMarker(isCrit);
+                }
+            }
+
+            // Floating Damage Number (Free Fire style Yellow/Red numbers)
+            floatingTexts.push({
+                x: target.x + (Math.random() - 0.5) * 16,
+                y: target.y - 20,
+                text: isCrit ? `${finalDamage}!` : `${finalDamage}`,
+                color: isCrit ? '#ef4444' : '#facc15',
+                scale: isCrit ? 1.35 : 1.0,
+                life: 0.75
+            });
+
+            // Blood / spark particles
+            for (let i = 0; i < 6; i++) {
+                particles.push({
+                    x: target.x,
+                    y: target.y,
+                    vx: (Math.random() - 0.5) * 160,
+                    vy: (Math.random() - 0.5) * 160,
+                    life: 0.3,
+                    maxLife: 0.3,
+                    color: isCrit ? '#ef4444' : '#f87171',
+                    size: 3.5
+                });
+            }
+
+            if (target.hp <= 0) {
+                target.hp = 0;
+                target.alive = false;
+                handleElimination(target, attacker);
+            }
+        }
+
+        function handleElimination(victim, killer) {
+            const killerName = killer ? killer.name : 'RADIATION ZONE';
+            if (killer && killer.id !== victim.id) {
+                killer.kills++;
+            }
+
+            // Drop victim's loot crate
+            spawnRandomLoot(victim.x, victim.y);
+            lootItems.push({
+                x: victim.x + 14,
+                y: victim.y - 10,
+                radius: 14,
+                bobOffset: 0,
+                type: 'medkit',
+                label: 'MEDKIT',
+                color: '#10b981'
+            });
+
+            addKillFeed(killerName, victim.name, killer && killer.isPlayer);
+
+            const aliveSurvivors = survivors.filter(s => s.alive);
+            updateHUD();
+
+            // Check end conditions
+            if (victim.isPlayer) {
+                endMatch(false, aliveSurvivors.length + 1);
+            } else if (aliveSurvivors.length === 1 && aliveSurvivors[0].isPlayer) {
+                endMatch(true, 1);
+            }
+        }
+
+        function addKillFeed(killer, victim, isPlayerKill) {
+            const feed = document.getElementById('killFeed');
+            const row = document.createElement('div');
+            row.className = `px-2.5 py-1 rounded text-[11px] font-tactical font-bold tracking-wide shadow border ${
+                isPlayerKill
+                    ? 'bg-amber-500/25 border-amber-400 text-amber-200'
+                    : 'bg-slate-900/80 border-slate-700 text-slate-300'
+            }`;
+            row.innerHTML = `<span class="text-white">${killer}</span> <span class="text-rose-400 mx-1">eliminated</span> <span class="text-slate-200">${victim}</span>`;
+            feed.prepend(row);
+
+            if (feed.children.length > 4) {
+                feed.removeChild(feed.lastChild);
+            }
+            setTimeout(() => {
+                if (row.parentNode) row.remove();
+            }, 4500);
+        }
+
+        // ==========================================
+        // 8. AI BOT BEHAVIOR
+        // ==========================================
+        function updateBotAI(bot, dt) {
+            if (!bot.alive) return;
+
+            bot.aiDecisionTimer -= dt;
+
+            // Check if outside Safe Zone -> prioritize running toward center
+            const distFromZone = Math.hypot(bot.x - safeZone.x, bot.y - safeZone.y);
+            const outsideZone = distFromZone > safeZone.currentRadius - 40;
+
+            // Heal if low HP and out of immediate danger
+            if (bot.hp < 110 && bot.medkits > 0 && !bot.healing && !outsideZone) {
+                useMedkit(bot);
+            }
+
+            // Find nearest visible enemy
+            let nearestEnemy = null;
+            let nearestDist = 520;
+            for (const other of survivors) {
+                if (!other.alive || other.id === bot.id) continue;
+                const d = Math.hypot(other.x - bot.x, other.y - bot.y);
+                if (d < nearestDist) {
+                    nearestDist = d;
+                    nearestEnemy = other;
+                }
+            }
+
+            if (outsideZone) {
+                // Sprint into safe zone
+                const angleToCenter = Math.atan2(safeZone.y - bot.y, safeZone.x - bot.x);
+                bot.angle = angleToCenter;
+                moveEntityWithCollision(bot, Math.cos(angleToCenter) * bot.speed * dt, Math.sin(angleToCenter) * bot.speed * dt);
+                return;
+            }
+
+            if (nearestEnemy) {
+                // Combat Mode
+                const aimAngle = Math.atan2(nearestEnemy.y - bot.y, nearestEnemy.x - bot.x);
+                // Smooth aim turn
+                bot.angle = aimAngle + (Math.random() - 0.5) * 0.14;
+
+                // Deploy Gloo Wall defensively when taking damage!
+                if (bot.hp < 120 && bot.glooWalls > 0 && Math.random() < 0.04) {
+                    deployGlooWall(bot);
+                }
+
+                // Strafe movement during gunfight
+                if (bot.aiDecisionTimer <= 0) {
+                    bot.aiStrafeDir *= -1;
+                    bot.aiDecisionTimer = 0.8 + Math.random() * 1.1;
+                }
+
+                const strafeAngle = aimAngle + (Math.PI / 2) * bot.aiStrafeDir;
+                const approachFactor = nearestDist > 260 ? 0.5 : (nearestDist < 130 ? -0.4 : 0);
+                const moveVx = (Math.cos(strafeAngle) * 0.75 + Math.cos(aimAngle) * approachFactor) * bot.speed * dt;
+                const moveVy = (Math.sin(strafeAngle) * 0.75 + Math.sin(aimAngle) * approachFactor) * bot.speed * dt;
+                moveEntityWithCollision(bot, moveVx, moveVy);
+
+                // Fire bursts
+                if (Math.random() < 0.65) {
+                    fireWeapon(bot);
+                }
+            } else {
+                // Roam & Loot Mode
+                let targetLoot = null;
+                let lootDist = 260;
+                for (const item of lootItems) {
+                    const d = Math.hypot(item.x - bot.x, item.y - bot.y);
+                    if (d < lootDist) {
+                        lootDist = d;
+                        targetLoot = item;
+                    }
+                }
+
+                if (targetLoot) {
+                    const angleToLoot = Math.atan2(targetLoot.y - bot.y, targetLoot.x - bot.x);
+                    bot.angle = angleToLoot;
+                    moveEntityWithCollision(bot, Math.cos(angleToLoot) * bot.speed * dt, Math.sin(angleToLoot) * bot.speed * dt);
+                } else {
+                    if (bot.aiDecisionTimer <= 0) {
+                        bot.aiMoveAngle = Math.random() * Math.PI * 2;
+                        bot.aiDecisionTimer = 1.5 + Math.random() * 2.5;
+                    }
+                    bot.angle = bot.aiMoveAngle;
+                    const prevX = bot.x;
+                    const prevY = bot.y;
+                    moveEntityWithCollision(bot, Math.cos(bot.aiMoveAngle) * (bot.speed * 0.75) * dt, Math.sin(bot.aiMoveAngle) * (bot.speed * 0.75) * dt);
+                    // Bounce off walls
+                    if (Math.hypot(bot.x - prevX, bot.y - prevY) < 0.5) {
+                        bot.aiMoveAngle += Math.PI * 0.7;
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 9. LOOT PICKUP LOGIC
+        // ==========================================
+        function checkLootPickups(survivor) {
+            if (!survivor.alive) return;
+
+            for (let i = lootItems.length - 1; i >= 0; i--) {
+                const item = lootItems[i];
+                const dist = Math.hypot(survivor.x - item.x, survivor.y - item.y);
+                if (dist < survivor.radius + item.radius + 8) {
+                    let picked = false;
+
+                    if (item.type === 'weapon') {
+                        const baseW = WEAPONS[item.weaponId];
+                        // Check if already carrying this weapon -> convert to ammo
+                        const existingSlot = survivor.weapons.findIndex(w => w && w.id === item.weaponId);
+                        if (existingSlot !== -1) {
+                            survivor.weapons[existingSlot].reserve += baseW.magSize * 2;
+                            picked = true;
+                        } else if (!survivor.weapons[0]) {
+                            survivor.weapons[0] = { ...baseW, ammo: baseW.magSize, reserve: baseW.magSize * 3 };
+                            survivor.activeSlot = 0;
+                            picked = true;
+                        } else if (!survivor.weapons[1]) {
+                            survivor.weapons[1] = { ...baseW, ammo: baseW.magSize, reserve: baseW.magSize * 3 };
+                            survivor.activeSlot = 1;
+                            picked = true;
+                        } else if (survivor.isPlayer && survivor.activeSlot < 2) {
+                            // Swap current primary slot
+                            survivor.weapons[survivor.activeSlot] = { ...baseW, ammo: baseW.magSize, reserve: baseW.magSize * 3 };
+                            picked = true;
+                        }
+                    } else if (item.type === 'medkit') {
+                        if (survivor.medkits < 5) {
+                            survivor.medkits++;
+                            picked = true;
+                        }
+                    } else if (item.type === 'gloo') {
+                        if (survivor.glooWalls < 5) {
+                            survivor.glooWalls++;
+                            picked = true;
+                        }
+                    } else if (item.type === 'vest') {
+                        if (survivor.armor < survivor.maxArmor) {
+                            survivor.armor = survivor.maxArmor;
+                            picked = true;
+                        }
+                    } else if (item.type === 'ammo') {
+                        let added = false;
+                        survivor.weapons.forEach(w => {
+                            if (w && !w.infiniteAmmo) {
+                                w.reserve += w.magSize * 2;
+                                added = true;
+                            }
+                        });
+                        if (added) picked = true;
+                    }
+
+                    if (picked) {
+                        if (survivor.isPlayer) {
+                            sfx.playPickup();
+                            floatingTexts.push({
+                                x: survivor.x,
+                                y: survivor.y - 26,
+                                text: `+ ${item.label}`,
+                                color: item.color,
+                                scale: 0.95,
+                                life: 0.7
+                            });
+                            updateHUD();
+                        }
+                        lootItems.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 10. SAFE ZONE SHRINKING MECHANIC
+        // ==========================================
+        function updateSafeZone(dt) {
+            if (safeZone.stage > 5) return;
+
+            if (!safeZone.shrinking) {
+                safeZone.timer -= dt;
+                if (safeZone.timer <= 0) {
+                    safeZone.shrinking = true;
+                    safeZone.timer = 18; // 18s shrink phase
+                    // Pick slightly shifted center within current circle
+                    const shiftAngle = Math.random() * Math.PI * 2;
+                    const shiftDist = (safeZone.currentRadius - safeZone.targetRadius) * 0.45;
+                    safeZone.nextX = Math.max(400, Math.min(MAP_SIZE - 400, safeZone.x + Math.cos(shiftAngle) * shiftDist));
+                    safeZone.nextY = Math.max(400, Math.min(MAP_SIZE - 400, safeZone.y + Math.sin(shiftAngle) * shiftDist));
+                }
+            } else {
+                safeZone.timer -= dt;
+                const shrinkRate = (safeZone.currentRadius - safeZone.targetRadius) / Math.max(0.5, safeZone.timer);
+                safeZone.currentRadius = Math.max(safeZone.targetRadius, safeZone.currentRadius - shrinkRate * dt);
+                safeZone.x += (safeZone.nextX - safeZone.x) * dt * 0.4;
+                safeZone.y += (safeZone.nextY - safeZone.y) * dt * 0.4;
+
+                if (safeZone.timer <= 0) {
+                    safeZone.shrinking = false;
+                    safeZone.stage++;
+                    safeZone.timer = 20;
+                    safeZone.targetRadius = Math.max(140, safeZone.currentRadius * 0.58);
+                    safeZone.damagePerSec += 4;
+                }
+            }
+
+            // Deal radiation damage to anyone outside safe circle
+            for (const s of survivors) {
+                if (!s.alive) continue;
+                const dist = Math.hypot(s.x - safeZone.x, s.y - safeZone.y);
+                const isOutside = dist > safeZone.currentRadius;
+
+                if (s.isPlayer) {
+                    const banner = document.getElementById('zoneWarningBanner');
+                    if (isOutside) banner.classList.remove('hidden');
+                    else banner.classList.add('hidden');
+                }
+
+                if (isOutside) {
+                    s.hp -= safeZone.damagePerSec * dt;
+                    if (s.hp <= 0) {
+                        s.hp = 0;
+                        s.alive = false;
+                        handleElimination(s, null);
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 11. MAIN UPDATE LOOP
+        // ==========================================
+        function update(dt) {
+            if (gameState !== 'PLAYING') return;
+
+            updateSafeZone(dt);
+
+            // Update Player Input & Movement
+            if (player && player.alive) {
+                let mx = 0;
+                let my = 0;
+
+                if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
+                if (keys['KeyS'] || keys['ArrowDown']) my += 1;
+                if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+                if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+
+                if (touchInput.active && (touchInput.moveX !== 0 || touchInput.moveY !== 0)) {
+                    mx = touchInput.moveX;
+                    my = touchInput.moveY;
+                }
+
+                if (mx !== 0 || my !== 0) {
+                    const len = Math.hypot(mx, my);
+                    mx /= len;
+                    my /= len;
+                    moveEntityWithCollision(player, mx * player.speed * dt, my * player.speed * dt);
+                }
+
+                // Aiming
+                if (touchInput.active && (touchInput.aimX !== 0 || touchInput.aimY !== 0)) {
+                    player.angle = Math.atan2(touchInput.aimY, touchInput.aimX);
+                } else {
+                    mouse.worldX = mouse.x + camera.x;
+                    mouse.worldY = mouse.y + camera.y;
+                    player.angle = Math.atan2(mouse.worldY - player.y, mouse.worldX - player.x);
+                }
+
+                // Firing
+                if (mouse.down || touchInput.firing) {
+                    fireWeapon(player);
+                }
+            }
+
+            // Update all survivors (timers, reloads, healing, bots)
+            for (const s of survivors) {
+                if (!s.alive) continue;
+
+                if (s.fireCooldown > 0) s.fireCooldown -= dt;
+                if (s.hitFlash > 0) s.hitFlash -= dt;
+                if (s.muzzleFlash > 0) s.muzzleFlash -= dt;
+
+                // Reload timer
+                if (s.reloading) {
+                    s.reloadTimer -= dt;
+                    if (s.reloadTimer <= 0) {
+                        const w = getActiveWeapon(s);
+                        if (w) {
+                            if (w.infiniteAmmo) {
+                                w.ammo = w.magSize;
+                            } else {
+                                const needed = w.magSize - w.ammo;
+                                const take = Math.min(needed, w.reserve);
+                                w.ammo += take;
+                                w.reserve -= take;
+                            }
+                        }
+                        s.reloading = false;
+                    }
+                }
+
+                // Healing timer
+                if (s.healing) {
+                    s.healTimer -= dt;
+                    if (s.healTimer <= 0) {
+                        s.healing = false;
+                        s.medkits = Math.max(0, s.medkits - 1);
+                        s.hp = Math.min(s.maxHp, s.hp + 95);
+                        if (s.isPlayer) {
+                            sfx.playHeal();
+                            document.getElementById('healProgressOverlay').classList.add('hidden');
+                            floatingTexts.push({
+                                x: s.x,
+                                y: s.y - 25,
+                                text: '+95 HP',
+                                color: '#34d399',
+                                scale: 1.15,
+                                life: 0.8
+                            });
+                        }
+                    }
+                }
+
+                if (!s.isPlayer) {
+                    updateBotAI(s, dt);
+                }
+
+                checkLootPickups(s);
+            }
+
+            // Update Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.prevX = b.x;
+                b.prevY = b.y;
+
+                const stepX = b.vx * dt;
+                const stepY = b.vy * dt;
+                b.x += stepX;
+                b.y += stepY;
+                b.rangeLeft -= Math.hypot(stepX, stepY);
+
+                let destroyed = b.rangeLeft <= 0;
+
+                // 1. Check Gloo Wall Collision
+                if (!destroyed) {
+                    for (let g = glooWalls.length - 1; g >= 0; g--) {
+                        const gw = glooWalls[g];
+                        if (pointNearGlooWall(b.x, b.y, 4, gw)) {
+                            gw.hp -= b.damage;
+                            destroyed = true;
+                            // Ice hit spark
+                            particles.push({
+                                x: b.x, y: b.y,
+                                vx: (Math.random() - 0.5) * 100,
+                                vy: (Math.random() - 0.5) * 100,
+                                life: 0.2, maxLife: 0.2,
+                                color: '#67e8f9', size: 3
+                            });
+                            if (gw.hp <= 0) {
+                                glooWalls.splice(g, 1);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // 2. Check Building / Rock Collision
+                if (!destroyed) {
+                    for (const bld of buildings) {
+                        for (const w of bld.walls) {
+                            if (circleRectIntersect(b.x, b.y, 3, w.x, w.y, w.w, w.h)) {
+                                destroyed = true;
+                                break;
+                            }
+                        }
+                        if (destroyed) break;
+                    }
+                }
+                if (!destroyed) {
+                    for (const r of rocks) {
+                        if (Math.hypot(b.x - r.x, b.y - r.y) < r.radius) {
+                            destroyed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 3. Check Survivor Hit
+                if (!destroyed) {
+                    const attacker = survivors.find(s => s.id === b.ownerId);
+                    for (const target of survivors) {
+                        if (!target.alive || target.id === b.ownerId) continue;
+                        if (Math.hypot(b.x - target.x, b.y - target.y) < target.radius + 4) {
+                            applyDamage(target, b.damage, attacker, b.isCrit);
+                            destroyed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (destroyed) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // Update Gloo Walls lifetime
+            for (let i = glooWalls.length - 1; i >= 0; i--) {
+                glooWalls[i].life -= dt;
+                if (glooWalls[i].life <= 0) {
+                    glooWalls.splice(i, 1);
+                }
+            }
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Update Floating Texts
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y -= 38 * dt;
+                ft.life -= dt;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // Update Camera smoothly centered on Player
+            if (player) {
+                const targetCamX = player.x - canvas.width / 2;
+                const targetCamY = player.y - canvas.height / 2;
+                camera.x += (targetCamX - camera.x) * Math.min(1, dt * 12);
+                camera.y += (targetCamY - camera.y) * Math.min(1, dt * 12);
+
+                if (camera.shake > 0) {
+                    camera.shake = Math.max(0, camera.shake - dt * 28);
+                }
+            }
+
+            updateHUD();
+        }
+
+        // ==========================================
+        // 12. RENDERING (WORLD + MINIMAP)
+        // ==========================================
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'START' && !player) {
+                // Draw subtle animated grid background on lobby screen
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            ctx.save();
+            const shakeX = (Math.random() - 0.5) * camera.shake * 2;
+            const shakeY = (Math.random() - 0.5) * camera.shake * 2;
+            ctx.translate(-camera.x + shakeX, -camera.y + shakeY);
+
+            // 1. Terrain Grass & Tactical Grid
+            ctx.fillStyle = '#1e2f23'; // Deep tactical olive/grass base
+            ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+            // Subtle terrain patches
+            ctx.fillStyle = '#24382a';
+            for (let gx = 0; gx < MAP_SIZE; gx += 400) {
+                for (let gy = 0; gy < MAP_SIZE; gy += 400) {
+                    if ((gx + gy) % 800 === 0) {
+                        ctx.fillRect(gx, gy, 400, 400);
+                    }
+                }
+            }
+
+            // Roads connecting central Peak
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(0, MAP_SIZE / 2 - 42, MAP_SIZE, 84);
+            ctx.fillRect(MAP_SIZE / 2 - 42, 0, 84, MAP_SIZE);
+
+            // Grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= MAP_SIZE; x += 120) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, MAP_SIZE);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= MAP_SIZE; y += 120) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(MAP_SIZE, y);
+                ctx.stroke();
+            }
+
+            // Map Outer Border
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+            // 2. Building Floors & Walls
+            for (const b of buildings) {
+                // Concrete Floor
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+
+                // Floor tile lines
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(b.x + 6, b.y + 6, b.w - 12, b.h - 12);
+
+                // Walls with shadow
+                for (const w of b.walls) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                    ctx.fillRect(w.x + 5, w.y + 5, w.w, w.h);
+
+                    ctx.fillStyle = '#64748b';
+                    ctx.fillRect(w.x, w.y, w.w, w.h);
+                    ctx.strokeStyle = '#94a3b8';
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(w.x, w.y, w.w, w.h);
+                }
+            }
+
+            // 3. Loot Items on Ground
+            const timeSec = performance.now() / 1000;
+            for (const item of lootItems) {
+                const pulse = Math.sin(timeSec * 4 + item.bobOffset) * 2.5;
+
+                // Glowing loot ring
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, item.radius + pulse, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = item.color;
+                ctx.stroke();
+
+                // Icon / Tag
+                ctx.fillStyle = item.color;
+                ctx.font = 'bold 10px Rajdhani, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.label, item.x, item.y - item.radius - 6);
+
+                // Center emblem
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 4. Rocks
+            for (const r of rocks) {
+                ctx.beginPath();
+                ctx.arc(r.x + 5, r.y + 5, r.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#475569';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#64748b';
+                ctx.stroke();
+            }
+
+            // 5. Gloo Walls (Iconic Cyan Energy Shield Barriers)
+            for (const gw of glooWalls) {
+                ctx.save();
+                ctx.translate(gw.x, gw.y);
+                ctx.rotate(gw.angle);
+
+                const hpRatio = Math.max(0.2, gw.hp / gw.maxHp);
+                ctx.shadowColor = '#06b6d4';
+                ctx.shadowBlur = 14;
+
+                ctx.fillStyle = `rgba(34, 211, 238, ${0.45 + hpRatio * 0.4})`;
+                ctx.fillRect(-gw.thickness / 2, -gw.width / 2, gw.thickness, gw.width);
+
+                ctx.strokeStyle = '#cffafe';
+                ctx.lineWidth = 2.5;
+                ctx.strokeRect(-gw.thickness / 2, -gw.width / 2, gw.thickness, gw.width);
+                ctx.restore();
+            }
+
+            // 6. Survivors (Bots & Player)
+            for (const s of survivors) {
+                if (!s.alive) continue;
+
+                ctx.save();
+                ctx.translate(s.x, s.y);
+
+                // Drop Shadow
+                ctx.beginPath();
+                ctx.arc(4, 5, s.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.fill();
+
+                // Rotate body toward aim angle
+                ctx.save();
+                ctx.rotate(s.angle);
+
+                // Weapon Barrel
+                const activeW = getActiveWeapon(s);
+                ctx.fillStyle = '#0f172a';
+                const barrelLen = activeW.id === 'sniper' ? 30 : (activeW.id === 'ar' ? 24 : 18);
+                ctx.fillRect(6, -3.5, barrelLen, 7);
+
+                // Muzzle Flash
+                if (s.muzzleFlash > 0) {
+                    ctx.beginPath();
+                    ctx.arc(barrelLen + 10, 0, 10, 0, Math.PI * 2);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fill();
+                }
+
+                // Shoulders / Torso
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius, 0, Math.PI * 2);
+                ctx.fillStyle = s.hitFlash > 0 ? '#ffffff' : s.shirtColor;
+                ctx.fill();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = s.isPlayer ? '#fef08a' : '#0f172a';
+                ctx.stroke();
+
+                // Armor Vest indicator ring
+                if (s.armor > 0) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, s.radius - 4, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(2, 0, 8.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#fed7aa';
+                ctx.fill();
+
+                ctx.restore();
+
+                // Name & Health Bar above Survivor
+                if (!s.isPlayer) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+                    ctx.fillRect(-22, -31, 44, 5);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-22, -31, 44 * (s.hp / s.maxHp), 5);
+
+                    ctx.font = 'bold 11px Rajdhani, sans-serif';
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(s.name, 0, -35);
+                } else if (s.reloading) {
+                    ctx.font = 'bold 12px Rajdhani, sans-serif';
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('RELOADING...', 0, -28);
+                }
+
+                ctx.restore();
+            }
+
+            // 7. Tree Canopies (Drawn above survivors for tactical cover)
+            for (const t of trees) {
+                ctx.beginPath();
+                ctx.arc(t.x + 8, t.y + 8, t.canopyRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, t.canopyRadius, 0, Math.PI * 2);
+                ctx.fillStyle = t.shade;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#22c55e';
+                ctx.stroke();
+            }
+
+            // 8. Bullet Tracers
+            for (const b of bullets) {
+                ctx.beginPath();
+                ctx.moveTo(b.prevX, b.prevY);
+                ctx.lineTo(b.x, b.y);
+                ctx.strokeStyle = b.color;
+                ctx.lineWidth = b.isCrit ? 4 : 2.8;
+                ctx.stroke();
+            }
+
+            // 9. Particles
+            for (const p of particles) {
+                ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            // 10. Floating Damage Numbers
+            for (const ft of floatingTexts) {
+                ctx.save();
+                ctx.font = `800 ${Math.round(16 * ft.scale)}px Rajdhani, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#000000';
+                ctx.fillText(ft.text, ft.x + 1.5, ft.y + 1.5);
+                ctx.fillStyle = ft.color;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            }
+
+            // 11. Shrinking Safe Zone Ring & Danger Radiation Overlay
+            ctx.save();
+            // Draw outer danger zone tint using even-odd fill rule
+            ctx.beginPath();
+            ctx.rect(-500, -500, MAP_SIZE + 1000, MAP_SIZE + 1000);
+            ctx.arc(safeZone.x, safeZone.y, safeZone.currentRadius, 0, Math.PI * 2, true);
+            ctx.fillStyle = 'rgba(37, 99, 235, 0.22)';
+            ctx.fill();
+
+            // Glowing Safe Zone Perimeter
+            ctx.beginPath();
+            ctx.arc(safeZone.x, safeZone.y, safeZone.currentRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+
+            // Next Safe Zone preview circle (White dashed)
+            if (safeZone.shrinking) {
+                ctx.beginPath();
+                ctx.arc(safeZone.nextX, safeZone.nextY, safeZone.targetRadius, 0, Math.PI * 2);
+                ctx.setLineDash([12, 10]);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            ctx.restore();
+
+            // Render Tactical Minimap
+            renderMinimap();
+        }
+
+        function renderMinimap() {
+            const mw = miniCanvas.width;
+            const mh = miniCanvas.height;
+            const scale = mw / MAP_SIZE;
+
+            miniCtx.clearRect(0, 0, mw, mh);
+            miniCtx.fillStyle = '#132018';
+            miniCtx.fillRect(0, 0, mw, mh);
+
+            // Buildings on minimap
+            miniCtx.fillStyle = '#64748b';
+            for (const b of buildings) {
+                miniCtx.fillRect(b.x * scale, b.y * scale, b.w * scale, b.h * scale);
+            }
+
+            // Safe Zone Circle
+            miniCtx.beginPath();
+            miniCtx.arc(safeZone.x * scale, safeZone.y * scale, safeZone.currentRadius * scale, 0, Math.PI * 2);
+            miniCtx.strokeStyle = '#38bdf8';
+            miniCtx.lineWidth = 1.5;
+            miniCtx.stroke();
+
+            // Next Safe Zone Circle
+            if (safeZone.shrinking) {
+                miniCtx.beginPath();
+                miniCtx.arc(safeZone.nextX * scale, safeZone.nextY * scale, safeZone.targetRadius * scale, 0, Math.PI * 2);
+                miniCtx.strokeStyle = 'rgba(255,255,255,0.6)';
+                miniCtx.lineWidth = 1;
+                miniCtx.stroke();
+            }
+
+            // Nearby Enemies (Red dots when close or shooting)
+            for (const s of survivors) {
+                if (!s.alive || s.isPlayer) continue;
+                const dist = player ? Math.hypot(s.x - player.x, s.y - player.y) : 9999;
+                if (dist < 650 || s.muzzleFlash > 0) {
+                    miniCtx.fillStyle = '#f43f5e';
+                    miniCtx.beginPath();
+                    miniCtx.arc(s.x * scale, s.y * scale, 2.5, 0, Math.PI * 2);
+                    miniCtx.fill();
+                }
+            }
+
+            // Player Arrow/Dot
+            if (player && player.alive) {
+                miniCtx.fillStyle = '#facc15';
+                miniCtx.beginPath();
+                miniCtx.arc(player.x * scale, player.y * scale, 3.8, 0, Math.PI * 2);
+                miniCtx.fill();
+            }
+        }
+
+        // ==========================================
+        // 13. HUD UPDATES & MATCH FLOW
+        // ==========================================
+        function updateHUD() {
+            if (!player) return;
+
+            const aliveCount = survivors.filter(s => s.alive).length;
+            document.getElementById('aliveCount').textContent = aliveCount;
+            document.getElementById('killCount').textContent = player.kills;
+
+            // Safe Zone Timer
+            const secs = Math.max(0, Math.ceil(safeZone.timer));
+            document.getElementById('zoneTimerText').textContent = `00:${secs < 10 ? '0' + secs : secs}`;
+            const zLabel = document.getElementById('zoneStatusLabel');
+            if (safeZone.shrinking) {
+                zLabel.textContent = 'ZONE SHRINKING';
+                zLabel.className = 'text-rose-400 animate-pulse';
+            } else {
+                zLabel.textContent = `STAGE ${safeZone.stage} SAFE`;
+                zLabel.className = 'text-cyan-400';
+            }
+
+            // HP & Armor
+            const hpPct = Math.max(0, (player.hp / player.maxHp) * 100);
+            document.getElementById('hpBar').style.width = `${hpPct}%`;
+            document.getElementById('hpText').textContent = `${Math.ceil(player.hp)}/${player.maxHp}`;
+
+            const armorPct = Math.max(0, (player.armor / player.maxArmor) * 100);
+            document.getElementById('armorBar').style.width = `${armorPct}%`;
+            document.getElementById('armorText').textContent = `${Math.ceil(player.armor)}/${player.maxArmor}`;
+
+            // Medkits & Gloo Walls
+            document.getElementById('medkitCount').textContent = `x${player.medkits}`;
+            document.getElementById('glooCount').textContent = `x${player.glooWalls}`;
+
+            // Weapon Slots
+            for (let i = 0; i < 3; i++) {
+                const slotEl = document.getElementById(`slot${i}`);
+                const nameEl = document.getElementById(`slot${i}Name`);
+                const ammoEl = document.getElementById(`slot${i}Ammo`);
+                const w = player.weapons[i];
+
+                if (player.activeSlot === i) slotEl.classList.add('slot-active');
+                else slotEl.classList.remove('slot-active');
+
+                if (w) {
+                    nameEl.textContent = w.shortName;
+                    ammoEl.textContent = w.infiniteAmmo ? `${w.ammo}/∞` : `${w.ammo}/${w.reserve}`;
+                } else {
+                    nameEl.textContent = 'EMPTY';
+                    ammoEl.textContent = '--/--';
+                }
+            }
+        }
+
+        function startMatch() {
+            sfx.init();
+            generateMap();
+            spawnSurvivors();
+
+            safeZone = {
+                x: MAP_SIZE / 2,
+                y: MAP_SIZE / 2,
+                currentRadius: 1550,
+                targetRadius: 1100,
+                nextX: MAP_SIZE / 2,
+                nextY: MAP_SIZE / 2,
+                stage: 1,
+                timer: 20,
+                shrinking: false,
+                damagePerSec: 6
+            };
+
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+
+            document.getElementById('killFeed').innerHTML = '';
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('endScreen').classList.add('hidden');
+            document.getElementById('healProgressOverlay').classList.add('hidden');
+            document.getElementById('zoneWarningBanner').classList.add('hidden');
+
+            document.getElementById('hudTopLeft').classList.remove('hidden');
+            document.getElementById('hudTopRight').classList.remove('hidden');
+            document.getElementById('hudBottom').classList.remove('hidden');
+
+            // Detect mobile / touch screen
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                touchInput.active = true;
+                document.getElementById('touchControls').classList.remove('hidden');
+            }
+
+            gameState = 'PLAYING';
+            updateHUD();
+        }
+
+        function endMatch(isVictory, rank) {
+            gameState = isVictory ? 'VICTORY' : 'GAMEOVER';
+            mouse.down = false;
+            touchInput.firing = false;
+
+            document.getElementById('zoneWarningBanner').classList.add('hidden');
+            const endScreen = document.getElementById('endScreen');
+            const titleEl = document.getElementById('endTitle');
+            const subEl = document.getElementById('endSubtitle');
+            const accentEl = document.getElementById('endTopAccent');
+
+            if (isVictory) {
+                titleEl.textContent = 'BOOYAH!';
+                titleEl.className = 'font-tactical font-extrabold text-5xl sm:text-6xl italic uppercase tracking-tight text-amber-400 drop-shadow';
+                subEl.textContent = 'Champion of Bermuda Sector! Last survivor standing.';
+                accentEl.className = 'absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500';
+                sfx.playHeal();
+            } else {
+                titleEl.textContent = 'ELIMINATED';
+                titleEl.className = 'font-tactical font-extrabold text-5xl sm:text-6xl italic uppercase tracking-tight text-rose-500 drop-shadow';
+                subEl.textContent = 'Better luck next drop, Survivor!';
+                accentEl.className = 'absolute top-0 left-0 right-0 h-2 bg-rose-600';
+            }
+
+            document.getElementById('statRank').textContent = `#${rank}`;
+            document.getElementById('statKills').textContent = player ? player.kills : 0;
+            document.getElementById('statDamage').textContent = player ? player.damageDealt : 0;
+
+            endScreen.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 14. EVENT LISTENERS & TOUCH STICKS
+        // ==========================================
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (gameState !== 'PLAYING' || !player || !player.alive) return;
+
+            if (e.code === 'Digit1') selectWeaponSlot(0);
+            if (e.code === 'Digit2') selectWeaponSlot(1);
+            if (e.code === 'Digit3') selectWeaponSlot(2);
+            if (e.code === 'KeyR') startReload(player);
+            if (e.code === 'KeyH') useMedkit(player);
+            if (e.code === 'KeyG' || e.code === 'Space') {
+                e.preventDefault();
+                deployGlooWall(player);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (gameState !== 'PLAYING' || !player || !player.alive) return;
+            if (e.button === 0) mouse.down = true;
+            if (e.button === 2) deployGlooWall(player);
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) mouse.down = false;
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // HUD Button Clicks
+        document.getElementById('btnStartGame').addEventListener('click', startMatch);
+        document.getElementById('btnPlayAgain').addEventListener('click', startMatch);
+        document.getElementById('btnMedkit').addEventListener('click', () => player && useMedkit(player));
+        document.getElementById('btnGloo').addEventListener('click', () => player && deployGlooWall(player));
+        document.getElementById('btnReload').addEventListener('click', () => player && startReload(player));
+
+        document.getElementById('muteBtn').addEventListener('click', () => {
+            const isMuted = sfx.toggleMute();
+            document.getElementById('muteIcon').textContent = isMuted ? '🔇' : '🔊';
+            document.getElementById('muteLabel').textContent = isMuted ? 'MUTED' : 'SFX ON';
+        });
+
+        // Mobile Dual Joystick Setup
+        function setupTouchStick(zoneId, knobId, onUpdate, onEnd) {
+            const zone = document.getElementById(zoneId);
+            const knob = document.getElementById(knobId);
+            let touchId = null;
+
+            zone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const t = e.changedTouches[0];
+                touchId = t.identifier;
+                handleTouch(t);
+            }, { passive: false });
+
+            zone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (const t of e.changedTouches) {
+                    if (t.identifier === touchId) handleTouch(t);
+                }
+            }, { passive: false });
+
+            const endTouch = (e) => {
+                for (const t of e.changedTouches) {
+                    if (t.identifier === touchId) {
+                        touchId = null;
+                        knob.style.transform = `translate(0px, 0px)`;
+                        onEnd();
+                    }
+                }
+            };
+            zone.addEventListener('touchend', endTouch);
+            zone.addEventListener('touchcancel', endTouch);
+
+            function handleTouch(t) {
+                const rect = zone.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const maxR = rect.width / 2 - 16;
+                let dx = t.clientX - cx;
+                let dy = t.clientY - cy;
+                const dist = Math.hypot(dx, dy);
+                if (dist > maxR) {
+                    dx = (dx / dist) * maxR;
+                    dy = (dy / dist) * maxR;
+                }
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+                onUpdate(dx / maxR, dy / maxR);
+            }
+        }
+
+        setupTouchStick('leftStickZone', 'leftStickKnob',
+            (nx, ny) => { touchInput.moveX = nx; touchInput.moveY = ny; },
+            () => { touchInput.moveX = 0; touchInput.moveY = 0; }
+        );
+
+        setupTouchStick('rightStickZone', 'rightStickKnob',
+            (nx, ny) => {
+                touchInput.aimX = nx;
+                touchInput.aimY = ny;
+                touchInput.firing = Math.hypot(nx, ny) > 0.35;
+            },
+            () => { touchInput.firing = false; }
+        );
+
+        // ==========================================
+        // 15. MAIN ANIMATION LOOP
+        // ==========================================
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
+            lastTime = timestamp;
+
+            update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = function () {
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
