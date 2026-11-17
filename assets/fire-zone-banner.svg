@@ -1,0 +1,84 @@
+<svg width="1400" height="600" viewBox="0 0 1400 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#070B14"/>
+      <stop offset="0.5" stop-color="#101827"/>
+      <stop offset="1" stop-color="#1A1423"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="0.5" stop-color="#F97316"/>
+      <stop offset="1" stop-color="#FB7185"/>
+    </linearGradient>
+    <linearGradient id="zone" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#F59E0B" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="1400" height="600" fill="url(#bg)"/>
+
+  <circle cx="1100" cy="90" r="180" fill="#F59E0B" fill-opacity="0.12"/>
+  <circle cx="1200" cy="480" r="220" fill="#06B6D4" fill-opacity="0.08"/>
+
+  <g opacity="0.16">
+    <path d="M70 470C210 330 330 250 515 245C688 240 790 325 940 265C1080 210 1195 205 1330 265V520H70V470Z" fill="#1E293B"/>
+    <path d="M90 470C250 340 360 270 525 265C692 259 800 330 960 282C1110 238 1225 245 1285 300" stroke="#94A3B8" stroke-width="2"/>
+  </g>
+
+  <g opacity="0.24">
+    <rect x="160" y="130" width="220" height="220" rx="14" fill="#111827" stroke="#64748B"/>
+    <rect x="250" y="200" width="130" height="140" rx="10" fill="#1F2937"/>
+    <rect x="180" y="250" width="50" height="90" rx="8" fill="#334155"/>
+    <rect x="372" y="100" width="200" height="260" rx="14" fill="#111827" stroke="#64748B"/>
+    <rect x="425" y="180" width="120" height="140" rx="10" fill="#1F2937"/>
+    <rect x="450" y="180" width="70" height="14" rx="7" fill="#FFB703" fill-opacity="0.9"/>
+    <rect x="1060" y="120" width="180" height="240" rx="14" fill="#111827" stroke="#64748B"/>
+    <rect x="1085" y="210" width="130" height="120" rx="10" fill="#1F2937"/>
+    <rect x="1115" y="160" width="70" height="30" rx="15" fill="#0EA5E9" fill-opacity="0.8"/>
+  </g>
+
+  <g filter="url(#glow)">
+    <path d="M370 170L450 100L530 170L450 240L370 170Z" fill="url(#accent)" opacity="0.95"/>
+    <path d="M455 130L500 170L455 210L410 170L455 130Z" fill="#0F172A" fill-opacity="0.45"/>
+  </g>
+
+  <g>
+    <circle cx="1030" cy="308" r="96" fill="#1E293B" stroke="#F59E0B" stroke-width="4"/>
+    <circle cx="1030" cy="308" r="60" fill="#0F172A" stroke="#22D3EE" stroke-width="3"/>
+    <path d="M1000 308L1025 283L1055 308L1025 333L1000 308Z" fill="#22D3EE"/>
+    <path d="M1030 256V308H1082" stroke="#F8FAFC" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g>
+    <rect x="100" y="55" width="430" height="52" rx="26" fill="#0F172A" fill-opacity="0.75" stroke="#F59E0B" stroke-opacity="0.9"/>
+    <text x="125" y="89" fill="#F9FAFB" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="6">BATTLE ROYALE MODE</text>
+  </g>
+
+  <g>
+    <text x="100" y="300" fill="#F8FAFC" font-size="118" font-family="Segoe UI, Arial, sans-serif" font-weight="900" letter-spacing="3">FIRE</text>
+    <text x="100" y="404" fill="#F59E0B" font-size="118" font-family="Segoe UI, Arial, sans-serif" font-weight="900" letter-spacing="3">ZONE</text>
+    <text x="100" y="470" fill="#E2E8F0" font-size="38" font-family="Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="10">SURVIVE • FIGHT • DOMINATE</text>
+  </g>
+
+  <g>
+    <rect x="912" y="445" width="335" height="72" rx="18" fill="#0B1120" stroke="#22D3EE" stroke-opacity="0.9"/>
+    <text x="938" y="489" fill="#E0F2FE" font-size="28" font-family="Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="4">GEMINI HYDROZEN</text>
+  </g>
+
+  <g>
+    <path d="M870 160C915 110 973 89 1034 95C1092 100 1156 126 1188 170" stroke="url(#zone)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+    <path d="M885 188C930 146 980 130 1038 135C1089 139 1138 157 1170 185" stroke="#22D3EE" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  </g>
+
+  <g opacity="0.9">
+    <circle cx="680" cy="230" r="8" fill="#F59E0B"/>
+    <circle cx="715" cy="260" r="8" fill="#FB7185"/>
+    <circle cx="750" cy="210" r="8" fill="#22D3EE"/>
+    <circle cx="790" cy="250" r="8" fill="#F59E0B"/>
+    <circle cx="820" cy="220" r="8" fill="#A78BFA"/>
+  </g>
+</svg>
